@@ -1,0 +1,6 @@
+{
+  "release_denylist": [
+    "protobuf-*-py2.py3-none-any.whl"
+  ],
+  "version_limits": ">=3,!=3.16.*,<4"
+}

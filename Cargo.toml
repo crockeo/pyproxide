@@ -1,0 +1,19 @@
+[package]
+name = "pyproxide"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hyper = { version = "0.14.17", features = ["client"] }
+hyper-tls = "0.5.0"
+kuchiki = "0.8.1"
+lazy_static = "1.4.0"
+log = "0.4.14"
+pretty_assertions = "1.2.0"
+regex = "1.5.5"
+serde = { version = "1.0.136", features = ["derive"] }
+serde_json = "1.0.79"
+tokio = { version = "1.17.0", features = ["full"] }
+warp = "0.3.2"
