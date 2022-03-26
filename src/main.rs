@@ -122,7 +122,6 @@ async fn handle_package_index(
             .collect::<HashSet<String>>();
 
         let specifier_set = SpecifierSet::from_str(&package_config.version_limits).unwrap();
-        println!("{:?}", specifier_set);
 
         // TODO: filter this in place to not copy memory around
         let mut releases = vec![];
