@@ -139,8 +139,22 @@ async fn handle_package_index(
                 }
             }
 
-            // TODO: also filter out sdists
-            // TODO: also filter out .eggs
+	    if release.name.ends_with(".tar.gz") || release.name.ends_with(".zip") || release.name.ends_with(".sdist") {
+		// TODO: error handling...lol
+		let (pkg, _) = release.name.split_once('.').unwrap();
+		let (_, version_str) = pkg.split_once('-').unwrap();
+		let version = Version::from_str(version_str).unwrap();
+		if !specifier_set.contains(&version) {
+		    continue;
+		}
+	    }
+
+	    if release.name.ends_with(".egg") {
+		// Opinionated choice: we don't care about eggs anymore!
+		// We have a standardized built distribution format in wheels.
+		// If a project only publishes eggs you probably don't want to use it.
+		continue;
+	    }
 
             releases.push(release);
         }
