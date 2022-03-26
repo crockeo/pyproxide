@@ -62,6 +62,12 @@ impl PartialOrd for Version {
             }
         }
 
+	if let (None, Some(_)) = (self.pre_release, other.pre_release) {
+	    return Some(Ordering::Greater);
+	} else if let (Some(_), None) = (self.pre_release, other.pre_release) {
+	    return Some(Ordering::Less);
+	}
+
         let versions_cmp = self.versions.cmp(&other.versions);
         if versions_cmp != Ordering::Equal {
             return Some(versions_cmp);
@@ -133,7 +139,7 @@ impl FromStr for Version {
     fn from_str(version_str: &str) -> Result<Self, Self::Err> {
         lazy_static! {
             static ref RE: Regex = Regex::new(
-        r#"^((?P<epoch>\d+)!)?(?P<version>\d+(\.\d+)*)((?P<pre_release_kind>a|b|rc)(?P<pre_release_num>\d+))?(\.post(?P<post_release>\d+))?(\.dev(?P<dev_release>\d+))?(\+(?P<local>.+))?$"#,
+        r#"^((?P<epoch>\d+)!)?(?P<version>\d+(\.\d+)*)((?P<pre_release_kind>a|alpha|b|beta|rc)(?P<pre_release_num>\d+))?(\.post(?P<post_release>\d+))?(\.dev(?P<dev_release>\d+))?(\+(?P<local>.+))?$"#,
             ).unwrap();
         }
 
@@ -333,6 +339,7 @@ mod tests {
                 pre_release: Some(PreRelease::ReleaseCandidate(3)),
                 post_release: Some(1),
                 dev_release: Some(2),
+		local: None,
             }),
         );
     }
@@ -350,6 +357,7 @@ mod tests {
                         pre_release: None,
                         post_release: None,
                         dev_release: None,
+			local: None,
                     },
                 },
                 Specifier {
@@ -360,6 +368,7 @@ mod tests {
                         pre_release: None,
                         post_release: None,
                         dev_release: None,
+			local: None,
                     },
                 },
             ],
@@ -376,5 +385,13 @@ mod tests {
     fn test_specifier_set_to_string() {
         let specifier_set_str = make_specifier_set().to_string();
         assert_eq!(specifier_set_str, SPECIFIER_SET_STR);
+    }
+
+    #[test]
+    fn test_specifier_set_pre_releases() {
+	let specifier_set = SpecifierSet::from_str(">=1.0.0").unwrap();
+	let version = Version::from_str("1.0.0a0").unwrap();
+
+	assert_eq!(specifier_set.contains(&version), false);
     }
 }

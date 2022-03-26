@@ -2,7 +2,7 @@ use std::{collections::HashSet, error, fs, path::Path, str::FromStr};
 
 use hyper::{body::HttpBody, Body, Client, Request, Response};
 use hyper_tls::HttpsConnector;
-use log::{info, Level, Metadata, Record};
+use log::{Level, Metadata, Record, info, log};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use warp::{
@@ -138,13 +138,27 @@ async fn handle_package_index(
                 }
             }
 
-	    if release.name.ends_with(".tar.gz") || release.name.ends_with(".zip") || release.name.ends_with(".sdist") {
-		// TODO: error handling...lol
-		let (pkg, _) = release.name.split_once('.').unwrap();
-		let (_, version_str) = pkg.split_once('-').unwrap();
-		let version = Version::from_str(version_str).unwrap();
-		if !specifier_set.contains(&version) {
-		    continue;
+	    let sdist_pkg = if release.name.ends_with(".tar.gz") {
+		Some(&release.name[..release.name.len() - ".tar.gz".len()])
+	    } else if release.name.ends_with(".zip") {
+		Some(&release.name[..release.name.len() - ".zip".len()])
+	    } else if release.name.ends_with(".sdist") {
+		Some(&release.name[..release.name.len() - ".sdist".len()])
+	    } else {
+		None
+	    };
+	    if let Some(sdist_pkg) = sdist_pkg {
+		let (_, version_str) = sdist_pkg.split_once('-').unwrap();
+		match Version::from_str(version_str) {
+		    Err(e) => {
+			log!(Level::Warn, "failed to parse version str for `{}`: {}", sdist_pkg, e);
+			continue;
+		    },
+		    Ok(version) => {
+			if !specifier_set.contains(&version) {
+			    continue;
+			}
+		    },
 		}
 	    }
 
