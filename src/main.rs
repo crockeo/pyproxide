@@ -4,6 +4,7 @@ use hyper::{body::HttpBody, Body, Client, Request, Response};
 use hyper_tls::HttpsConnector;
 use log::{info, log, Level, Metadata, Record};
 use serde::{Deserialize, Serialize};
+use tokio::join;
 use warp::{
     hyper::{body::Bytes, HeaderMap, Method},
     Filter,
@@ -112,11 +113,14 @@ async fn handle_package_index(
     info!("{} /simple/{}/", method, package);
 
     let uri = format!("https://pypi.org/simple/{package}/");
-    let mut res = forward_upstream(&uri, method, headers, body).await;
+
+    let (mut res, package_config) = join!(
+        forward_upstream(&uri, method, headers, body),
+        PackageConfig::load(format!("fixtures/{package}.json"))
+    );
     let mut package_index = pep_503::PackageIndex::from_str(res.body()).unwrap();
 
-    // TODO: forwarding request + loading JSON can happen in parallel
-    if let Ok(package_config) = PackageConfig::load(format!("fixtures/{package}.json")).await {
+    if let Ok(package_config) = package_config {
         let denylisted_releases = package_config
             .release_denylist
             .into_iter()
