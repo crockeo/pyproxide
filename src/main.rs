@@ -1,10 +1,10 @@
-use std::{collections::HashSet, error, fs, path::Path, str::FromStr};
+use std::{collections::HashSet, error, path::Path, str::FromStr};
 
 use hyper::{body::HttpBody, Body, Client, Request, Response};
 use hyper_tls::HttpsConnector;
-use log::{info, Level, Metadata, Record};
+use log::{info, log, Level, Metadata, Record};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use tokio::join;
 use warp::{
     hyper::{body::Bytes, HeaderMap, Method},
     Filter,
@@ -30,8 +30,10 @@ struct PackageConfig {
 }
 
 impl PackageConfig {
-    fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn error::Error>> {
-        Ok(serde_json::from_str(&fs::read_to_string(path)?)?)
+    async fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn error::Error>> {
+        Ok(serde_json::from_str(
+            &tokio::fs::read_to_string(path).await?,
+        )?)
     }
 }
 
@@ -111,18 +113,20 @@ async fn handle_package_index(
     info!("{} /simple/{}/", method, package);
 
     let uri = format!("https://pypi.org/simple/{package}/");
-    let mut res = forward_upstream(&uri, method, headers, body).await;
+
+    let (mut res, package_config) = join!(
+        forward_upstream(&uri, method, headers, body),
+        PackageConfig::load(format!("fixtures/{package}.json"))
+    );
     let mut package_index = pep_503::PackageIndex::from_str(res.body()).unwrap();
 
-    // TODO: forwarding request + loading JSON can happen in parallel
-    if let Ok(package_config) = PackageConfig::load(format!("fixtures/{package}.json")) {
+    if let Ok(package_config) = package_config {
         let denylisted_releases = package_config
             .release_denylist
             .into_iter()
             .collect::<HashSet<String>>();
 
         let specifier_set = SpecifierSet::from_str(&package_config.version_limits).unwrap();
-        println!("{:?}", specifier_set);
 
         // TODO: filter this in place to not copy memory around
         let mut releases = vec![];
@@ -139,8 +143,41 @@ async fn handle_package_index(
                 }
             }
 
-            // TODO: also filter out sdists
-            // TODO: also filter out .eggs
+            let sdist_pkg = if release.name.ends_with(".tar.gz") {
+                Some(&release.name[..release.name.len() - ".tar.gz".len()])
+            } else if release.name.ends_with(".zip") {
+                Some(&release.name[..release.name.len() - ".zip".len()])
+            } else if release.name.ends_with(".sdist") {
+                Some(&release.name[..release.name.len() - ".sdist".len()])
+            } else {
+                None
+            };
+            if let Some(sdist_pkg) = sdist_pkg {
+                let (_, version_str) = sdist_pkg.split_once('-').unwrap();
+                match Version::from_str(version_str) {
+                    Err(e) => {
+                        log!(
+                            Level::Warn,
+                            "failed to parse version str for `{}`: {}",
+                            sdist_pkg,
+                            e
+                        );
+                        continue;
+                    }
+                    Ok(version) => {
+                        if !specifier_set.contains(&version) {
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            if release.name.ends_with(".egg") {
+                // Opinionated choice: we don't care about eggs anymore!
+                // We have a standardized built distribution format in wheels.
+                // If a project only publishes eggs you probably don't want to use it.
+                continue;
+            }
 
             releases.push(release);
         }
